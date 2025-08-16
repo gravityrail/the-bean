@@ -1,0 +1,25 @@
+{
+  "name": "bean-simulator",
+  "version": "0.1.0",
+  "description": "A first-person 3D game featuring Little Bean the dog",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^7.36.0",
+    "@babylonjs/gui": "^7.36.0",
+    "@babylonjs/inspector": "^7.36.0",
+    "@babylonjs/loaders": "^7.36.0",
+    "@babylonjs/materials": "^7.36.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.1.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0"
+  }
+}
