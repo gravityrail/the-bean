@@ -7,7 +7,10 @@ import {
   Vector3,
   Mesh,
   TransformNode,
-  Animation
+  Animation,
+  Engine,
+  Ray,
+  CubicEase
 } from '@babylonjs/core';
 
 export enum CameraView {
@@ -32,7 +35,7 @@ export class Bean {
   private bobAmount: number = 0;
   private elapsedTime: number = 0;
   
-  private readonly HEIGHT = 0.8;
+  public readonly HEIGHT = 0.8;
   private readonly CAMERA_HEIGHT = 1.2;
   private readonly FOLLOW_DISTANCE = 5;
   private readonly FOLLOW_HEIGHT = 3;
@@ -61,10 +64,10 @@ export class Bean {
     whiteFurMaterial.emissiveColor = new Color3(0.02, 0.02, 0.02);
     
     const bodyMesh = MeshBuilder.CreateSphere('beanBody', {
-      diameter: 0.8,
+      diameter: 0.4,  // Half the diameter for slimmer torso
       segments: 16
     }, this.scene);
-    bodyMesh.scaling = new Vector3(1, 0.8, 1.2);  // Swapped X and Z scaling
+    bodyMesh.scaling = new Vector3(1, 1.6, 1.5);  // Adjusted scaling for slimmer look
     bodyMesh.position.y = 0;
     bodyMesh.material = whiteFurMaterial;
     bodyMesh.receiveShadows = true;
@@ -88,7 +91,7 @@ export class Bean {
       tessellation: 4
     }, this.scene);
     earMesh1.position = new Vector3(-0.1, 0.3, 0.35);  // Left ear
-    earMesh1.rotation.z = -0.3;
+    earMesh1.rotation.z = 0.3;  // Positive rotation for left ear (mirror of right)
     earMesh1.material = whiteFurMaterial;
     earMesh1.parent = this.group;
     this.addToShadowMap(earMesh1);
@@ -100,7 +103,7 @@ export class Bean {
       tessellation: 4
     }, this.scene);
     earMesh2.position = new Vector3(0.1, 0.3, 0.35);  // Right ear
-    earMesh2.rotation.z = -0.3;
+    earMesh2.rotation.z = -0.3;  // Negative rotation for right ear
     earMesh2.material = whiteFurMaterial;
     earMesh2.parent = this.group;
     this.addToShadowMap(earMesh2);
@@ -215,33 +218,36 @@ export class Bean {
     this.updatePosition();
   }
 
-  updatePosition(): void {
+  updatePosition(isVRMode: boolean = false): void {
     // Position the dog model
     this.group.position.x = this.position.x;
     this.group.position.z = this.position.z;
     this.group.rotation.y = this.rotation.y;  // Simple, direct rotation
     
-    if (this.cameraView === CameraView.FIRST_PERSON) {
-      // First person view - camera at dog's eye level
-      this.camera.position.x = this.position.x;
-      this.camera.position.y = this.position.y + this.CAMERA_HEIGHT;
-      this.camera.position.z = this.position.z;
-    } else if (this.cameraView === CameraView.FOLLOW) {
-      // Follow view - camera behind and above looking forward
-      // Calculate camera position behind the player
-      const cameraDistance = this.FOLLOW_DISTANCE;
-      const cameraX = this.position.x - Math.sin(this.rotation.y) * cameraDistance;
-      const cameraZ = this.position.z - Math.cos(this.rotation.y) * cameraDistance;
-      
-      this.camera.position.x = cameraX;
-      this.camera.position.y = this.position.y + this.FOLLOW_HEIGHT;
-      this.camera.position.z = cameraZ;
-      
-      // Look at a point in front of the dog
-      const lookDistance = 10;
-      const lookX = this.position.x + Math.sin(this.rotation.y) * lookDistance;
-      const lookZ = this.position.z + Math.cos(this.rotation.y) * lookDistance;
-      this.camera.setTarget(new Vector3(lookX, this.position.y + this.HEIGHT, lookZ));
+    // Don't update camera position in VR mode - WebXR handles it
+    if (!isVRMode) {
+      if (this.cameraView === CameraView.FIRST_PERSON) {
+        // First person view - camera at dog's eye level
+        this.camera.position.x = this.position.x;
+        this.camera.position.y = this.position.y + this.CAMERA_HEIGHT;
+        this.camera.position.z = this.position.z;
+      } else if (this.cameraView === CameraView.FOLLOW) {
+        // Follow view - camera behind and above looking forward
+        // Calculate camera position behind the player
+        const cameraDistance = this.FOLLOW_DISTANCE;
+        const cameraX = this.position.x - Math.sin(this.rotation.y) * cameraDistance;
+        const cameraZ = this.position.z - Math.cos(this.rotation.y) * cameraDistance;
+        
+        this.camera.position.x = cameraX;
+        this.camera.position.y = this.position.y + this.FOLLOW_HEIGHT;
+        this.camera.position.z = cameraZ;
+        
+        // Look at a point in front of the dog
+        const lookDistance = 10;
+        const lookX = this.position.x + Math.sin(this.rotation.y) * lookDistance;
+        const lookZ = this.position.z + Math.cos(this.rotation.y) * lookDistance;
+        this.camera.setTarget(new Vector3(lookX, this.position.y + this.HEIGHT, lookZ));
+      }
     }
   }
 
@@ -252,25 +258,120 @@ export class Bean {
     if (forward !== 0 || strafe !== 0) {
       this.isMoving = true;
       
-      // Simple FPS movement:
-      // Forward/back moves along the facing direction
-      // Strafe moves perpendicular to facing direction
+      // Calculate movement vector
       const forwardX = Math.sin(this.rotation.y) * forward * moveSpeed;
       const forwardZ = Math.cos(this.rotation.y) * forward * moveSpeed;
       
       const strafeX = Math.cos(this.rotation.y) * strafe * moveSpeed;
       const strafeZ = -Math.sin(this.rotation.y) * strafe * moveSpeed;
       
+      // Store old position for collision rollback
+      const oldPosition = this.position.clone();
+      
       // Apply movement
       this.position.x += forwardX + strafeX;
       this.position.z += forwardZ + strafeZ;
       
-      // Clamp to room boundaries
-      this.position.x = Math.max(-23, Math.min(23, this.position.x));
-      this.position.z = Math.max(-23, Math.min(23, this.position.z));
+      // Check for collisions
+      const moveDirection = new Vector3(forwardX + strafeX, 0, forwardZ + strafeZ);
+      const collisionInfo = this.checkCollisionWithStepUp(moveDirection);
+      
+      if (collisionInfo.hit) {
+        if (collisionInfo.canStepUp && collisionInfo.stepHeight !== undefined) {
+          // Smooth hop up onto the obstacle
+          const targetHeight = collisionInfo.stepHeight + this.HEIGHT;
+          
+          // Create a simple hop animation
+          Animation.CreateAndStartAnimation(
+            'beanHopUp',
+            this.group,
+            'position.y',
+            30, // fps
+            10, // frames
+            this.position.y,
+            targetHeight,
+            Animation.ANIMATIONLOOPMODE_CONSTANT,
+            new CubicEase(),
+            () => {
+              // Update position after animation
+              this.position.y = targetHeight;
+            }
+          );
+          
+          // Update logical position immediately
+          this.position.y = targetHeight;
+          // Keep horizontal movement
+        } else {
+          // Normal collision - rollback
+          this.position = oldPosition;
+        }
+      }
     } else {
       this.isMoving = false;
     }
+  }
+  
+  private checkCollisionWithStepUp(moveDirection: Vector3): { hit: boolean; canStepUp: boolean; stepHeight?: number } {
+    // Create ray from Bean's center in movement direction
+    const rayOrigin = new Vector3(this.position.x, this.position.y, this.position.z);
+    const rayLength = 0.4; // Bean's collision radius
+    
+    // Normalize movement direction for ray
+    const normalizedDir = moveDirection.normalize();
+    
+    // Cast ray in movement direction at current height
+    const ray = new Ray(rayOrigin, normalizedDir, rayLength);
+    const pickInfo = this.scene.pickWithRay(ray, (mesh) => {
+      // Don't collide with Bean's own parts, floors, or invisible meshes
+      return !mesh.name.includes('bean') && 
+             !mesh.name.includes('floor') && 
+             !mesh.name.includes('ground') &&
+             !mesh.name.includes('carpet') &&
+             mesh.isVisible &&
+             mesh.isEnabled() &&
+             mesh.checkCollisions !== false;
+    });
+    
+    if (!pickInfo?.hit) {
+      return { hit: false, canStepUp: false };
+    }
+    
+    // We hit something - check if we can step up onto it
+    const obstacle = pickInfo.pickedMesh;
+    if (!obstacle) {
+      return { hit: true, canStepUp: false };
+    }
+    
+    // Get the height of the obstacle
+    const bounds = obstacle.getBoundingInfo().boundingBox;
+    const obstacleTop = bounds.maximumWorld.y;
+    const currentFloorHeight = this.position.y - this.HEIGHT;
+    const stepHeight = obstacleTop - currentFloorHeight;
+    
+    // Maximum step-up height (2x Bean's height)
+    const maxStepHeight = this.HEIGHT * 2;
+    
+    // Check if the obstacle is low enough to step onto
+    if (stepHeight > 0 && stepHeight <= maxStepHeight) {
+      // Also check if there's space above the obstacle for Bean
+      const checkAboveOrigin = new Vector3(this.position.x, obstacleTop + this.HEIGHT, this.position.z);
+      const checkAboveRay = new Ray(checkAboveOrigin, normalizedDir, rayLength);
+      
+      const abovePickInfo = this.scene.pickWithRay(checkAboveRay, (mesh) => {
+        return !mesh.name.includes('bean') && 
+               mesh.isVisible &&
+               mesh.isEnabled() &&
+               mesh.checkCollisions !== false;
+      });
+      
+      // If there's no obstacle above, we can step up
+      if (!abovePickInfo?.hit) {
+        return { hit: true, canStepUp: true, stepHeight: obstacleTop };
+      }
+    }
+    
+    // Can't step up - normal collision
+    return { hit: true, canStepUp: false };
   }
 
   rotate(yaw: number, pitch: number): void {

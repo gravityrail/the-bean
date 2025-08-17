@@ -29,9 +29,12 @@ test('All source files exist', () => {
   const requiredFiles = [
     'src/main.ts',
     'src/game/Game.ts',
-    'src/game/World.ts',
+    'src/game/worlds/BaseWorld.ts',
+    'src/game/worlds/LowPolyWorld.ts',
+    'src/game/worlds/HomeWorld.ts',
     'src/game/Bean.ts',
     'src/controls/ControlsManager.ts',
+    'src/ui/MainMenu.ts',
     'index.html',
     'package.json',
     'tsconfig.json',
@@ -68,14 +71,18 @@ test('Bean.ts has character model setup', () => {
   assert(beanContent.includes('animations'), 'Bean missing animations');
 });
 
-// Test 5: Check if World has environment
-test('World.ts has house environment', () => {
-  const worldContent = readFileSync('src/game/World.ts', 'utf8');
-  assert(worldContent.includes('createFloor'), 'World missing floor');
-  assert(worldContent.includes('createWalls'), 'World missing walls');
-  assert(worldContent.includes('createFurniture'), 'World missing furniture');
-  assert(worldContent.includes('couch'), 'World missing couch');
-  assert(worldContent.includes('piano'), 'World missing piano');
+// Test 5: Check if worlds have environment
+test('Worlds have proper environment setup', () => {
+  const lowPolyContent = readFileSync('src/game/worlds/LowPolyWorld.ts', 'utf8');
+  assert(lowPolyContent.includes('createFloor'), 'LowPolyWorld missing floor');
+  assert(lowPolyContent.includes('createWalls'), 'LowPolyWorld missing walls');
+  assert(lowPolyContent.includes('createFurniture'), 'LowPolyWorld missing furniture');
+  assert(lowPolyContent.includes('couch'), 'LowPolyWorld missing couch');
+  assert(lowPolyContent.includes('piano'), 'LowPolyWorld missing piano');
+  
+  const homeContent = readFileSync('src/game/worlds/HomeWorld.ts', 'utf8');
+  assert(homeContent.includes('loadGLTFModel'), 'HomeWorld missing GLTF loader');
+  assert(homeContent.includes('8_16_2025.glb'), 'HomeWorld missing asset reference');
 });
 
 // Test 6: Check controls implementation
@@ -93,7 +100,7 @@ test('HTML has UI elements', () => {
   assert(htmlContent.includes('id="app"'), 'Missing app container');
   assert(htmlContent.includes('id="info"'), 'Missing info panel');
   assert(htmlContent.includes('id="crosshair"'), 'Missing crosshair');
-  assert(htmlContent.includes('id="vr-button"'), 'Missing VR button');
+  // VR button removed - Babylon.js WebXR creates its own button
 });
 
 // Test 8: Check if build configuration is correct
@@ -101,6 +108,14 @@ test('Vite config has HTTPS enabled', () => {
   const viteContent = readFileSync('vite.config.ts', 'utf8');
   assert(viteContent.includes('https: true'), 'HTTPS not enabled');
   assert(viteContent.includes('basicSsl'), 'SSL plugin not configured');
+});
+
+// Test 9: Check menu system
+test('MainMenu.ts has world selection', () => {
+  const menuContent = readFileSync('src/ui/MainMenu.ts', 'utf8');
+  assert(menuContent.includes('Low Poly World'), 'Menu missing Low Poly World');
+  assert(menuContent.includes('Home'), 'Menu missing Home');
+  assert(menuContent.includes('onWorldSelected'), 'Menu missing world selection handler');
 });
 
 console.log('\n============================');

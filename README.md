@@ -250,6 +250,26 @@ npm run build
 - Edge 90+
 - Safari 15+ (limited WebXR support)
 
+### Simplifying a 3D mesh
+
+For GLTF scans:
+
+Use [GLTF-Transform](https://github.com/donmccurdy/glTF-Transform)
+
+```bash
+npm install --global @gltf-transform/cli
+gltf-transform --help
+
+# transform using all techniques
+gltf-transform optimize public/assets/input.glb public/assets/output.glb --texture-compress webp
+```
+
+e.g. 
+
+```bash
+gltf-transform optimize public/assets/8_16_2025.glb public/assets/8_16_2025_optimized.glb --texture-compress webp
+```
+
 ## 📚 Resources
 
 - [Babylon.js Documentation](https://doc.babylonjs.com/)
